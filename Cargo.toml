@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "engineio-parser",
+    "engineio-client",
+    "engineio-server",
+]
