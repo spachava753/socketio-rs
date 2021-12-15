@@ -3,7 +3,7 @@ use thiserror::Error;
 
 const PACKET_SEPARATOR: &str = "\x1e";
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Eq, PartialEq)]
 pub enum PacketParsingError {
     #[error("invalid char")]
     InvalidChar,
@@ -98,8 +98,23 @@ impl TryFrom<&str> for Packet {
 }
 
 /// A payload is composed of one or more packets
+#[derive(Debug, Eq, PartialEq)]
 struct Payload {
     packets: Vec<Packet>,
+}
+
+impl TryFrom<&str> for Payload {
+    type Error = PacketParsingError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let mut payload = Payload {
+            packets: Vec::new()
+        };
+        for packet_str in value.split(PACKET_SEPARATOR) {
+            payload.packets.push(Packet::try_from(packet_str)?);
+        }
+        Ok(payload)
+    }
 }
 
 #[cfg(test)]
@@ -123,5 +138,75 @@ mod tests {
             packet_type: PacketType::Message,
             data: Some(PacketData::Binary(vec![1, 2, 3])),
         }, base64_msg.as_str().try_into().unwrap());
+    }
+
+    #[test]
+    fn hello_message_payload() {
+        assert_eq!(Payload {
+            packets: vec![Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::String("hello".to_string())),
+            }]
+        }, "4hello".try_into().unwrap());
+    }
+
+    #[test]
+    fn binary_message_payload() {
+        let mut base64_msg = "b".to_string();
+        base64_msg.push_str(base64::encode(vec![1, 2, 3]).as_str());
+        println!("base64 encoded message: {}", base64_msg);
+        assert_eq!(Payload {
+            packets: vec![Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::Binary(vec![1, 2, 3])),
+            }]
+        }, base64_msg.as_str().try_into().unwrap());
+    }
+
+    #[test]
+    fn multi_message_payload() {
+        let mut payload_msg = "4hello".to_string();
+        payload_msg.push_str(PACKET_SEPARATOR);
+        payload_msg.push_str("4world");
+        assert_eq!(Payload {
+            packets: vec![Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::String("hello".to_string())),
+            }, Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::String("world".to_string())),
+            }]
+        }, payload_msg.as_str().try_into().unwrap());
+    }
+
+    #[test]
+    fn multi_message_binary_payload() {
+        let mut payload_msg = "4hello".to_string();
+        payload_msg.push_str(PACKET_SEPARATOR);
+        let base64_msg = base64::encode(vec![1, 2, 3]);
+        println!("base64 encoded message: {}", base64_msg);
+        payload_msg.push_str("b");
+        payload_msg.push_str(base64_msg.as_str());
+        assert_eq!(Payload {
+            packets: vec![Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::String("hello".to_string())),
+            }, Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::Binary(vec![1, 2, 3])),
+            }]
+        }, payload_msg.as_str().try_into().unwrap());
+    }
+
+    #[test]
+    fn blank_packet_in_payload() {
+        let mut payload_msg = "4hello".to_string();
+        payload_msg.push_str(PACKET_SEPARATOR);
+        payload_msg.push_str(PACKET_SEPARATOR);
+        let base64_msg = base64::encode(vec![1, 2, 3]);
+        println!("base64 encoded message: {}", base64_msg);
+        payload_msg.push_str("b");
+        payload_msg.push_str(base64_msg.as_str());
+        assert_eq!(Err(PacketParsingError::EmptyString), Payload::try_from(payload_msg.as_str()));
     }
 }
