@@ -2,6 +2,7 @@ use base64::DecodeError;
 use thiserror::Error;
 
 const PACKET_SEPARATOR: &str = "\x1e";
+const PACKET_PROBE: &str = "probe";
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum PacketParsingError {
@@ -13,6 +14,12 @@ pub enum PacketParsingError {
     EmptyString,
     #[error("Invalid Binary Message")]
     InvalidBinaryMessage,
+    /// An invalid ping occurs when we are using the XHR transport and we get anything else besides '2probe'
+    #[error("invalid ping packet")]
+    InvalidPing,
+    /// An invalid pong occurs when we are using the XHR transport and we get anything else besides '3probe'
+    #[error("invalid pong packet")]
+    InvalidPong,
 }
 
 /// Packet type can one of enumerations
@@ -59,14 +66,28 @@ impl TryFrom<&str> for Packet {
                     packet_type: PacketType::Close,
                     data: None,
                 }),
-                '2' => Ok(Packet {
-                    packet_type: PacketType::Ping,
-                    data: None,
-                }),
-                '3' => Ok(Packet {
-                    packet_type: PacketType::Pong,
-                    data: None,
-                }),
+                '2' => {
+                    let msg = chars.collect::<String>();
+                    if msg.len() > 0 && msg != PACKET_PROBE {
+                        Err(PacketParsingError::InvalidPing)
+                    } else {
+                        Ok(Packet {
+                            packet_type: PacketType::Ping,
+                            data: Some(PacketData::String(msg)),
+                        })
+                    }
+                }
+                '3' => {
+                    let msg = chars.collect::<String>();
+                    if msg.len() > 0 && msg != PACKET_PROBE {
+                        Err(PacketParsingError::InvalidPong)
+                    } else {
+                        Ok(Packet {
+                            packet_type: PacketType::Pong,
+                            data: Some(PacketData::String(msg)),
+                        })
+                    }
+                }
                 '4' => Ok(Packet {
                     packet_type: PacketType::Message,
                     data: Some(PacketData::String(chars.collect::<String>())),
@@ -99,8 +120,14 @@ impl TryFrom<&str> for Packet {
 
 /// A payload is composed of one or more packets
 #[derive(Debug, Eq, PartialEq)]
-struct Payload {
+pub struct Payload {
     packets: Vec<Packet>,
+}
+
+impl Payload {
+    pub fn len(&self) -> usize {
+        self.packets.len()
+    }
 }
 
 impl TryFrom<&str> for Payload {
@@ -208,5 +235,38 @@ mod tests {
         payload_msg.push_str("b");
         payload_msg.push_str(base64_msg.as_str());
         assert_eq!(Err(PacketParsingError::EmptyString), Payload::try_from(payload_msg.as_str()));
+    }
+
+    #[test]
+    fn single_packet_in_payload() {
+        let mut payload_msg = "4hello".to_string();
+        assert_eq!(Payload {
+            packets: vec![Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::String("hello".to_string())),
+            }]
+        }, Payload::try_from(payload_msg.as_str()).unwrap());
+    }
+
+    #[test]
+    fn probe_ping_packet() {
+        let mut payload_msg = "2probe".to_string();
+        assert_eq!(Payload {
+            packets: vec![Packet {
+                packet_type: PacketType::Ping,
+                data: Some(PacketData::String("probe".to_string())),
+            }]
+        }, Payload::try_from(payload_msg.as_str()).unwrap());
+    }
+
+    #[test]
+    fn probe_pong_packet() {
+        let mut payload_msg = "3probe".to_string();
+        assert_eq!(Payload {
+            packets: vec![Packet {
+                packet_type: PacketType::Pong,
+                data: Some(PacketData::String("probe".to_string())),
+            }]
+        }, Payload::try_from(payload_msg.as_str()).unwrap());
     }
 }
