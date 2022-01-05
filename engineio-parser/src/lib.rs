@@ -23,7 +23,7 @@ pub enum PacketParsingError {
 }
 
 /// Packet type can one of enumerations
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum PacketType {
     Open,
     Close,
@@ -46,6 +46,15 @@ pub enum PacketData {
 pub struct Packet {
     packet_type: PacketType,
     data: Option<PacketData>,
+}
+
+impl Packet {
+    pub fn get_packet_type(&self) -> PacketType {
+        self.packet_type.clone()
+    }
+    pub fn get_packet_data(&self) -> Option<&PacketData> {
+        self.data.as_ref()
+    }
 }
 
 impl TryFrom<&str> for Packet {
@@ -99,7 +108,7 @@ impl TryFrom<&str> for Packet {
                             packet_type: PacketType::Message,
                             data: Some(PacketData::Binary(b)),
                         }),
-                        Err(_) => Err(PacketParsingError::InvalidBinaryMessage)
+                        Err(_) => Err(PacketParsingError::InvalidBinaryMessage),
                     }
                 }
                 '5' => Ok(Packet {
@@ -110,7 +119,7 @@ impl TryFrom<&str> for Packet {
                     packet_type: PacketType::Noop,
                     data: None,
                 }),
-                _ => Err(PacketParsingError::InvalidChar)
+                _ => Err(PacketParsingError::InvalidChar),
             }
         } else {
             Err(PacketParsingError::InvalidChar)
@@ -128,6 +137,9 @@ impl Payload {
     pub fn len(&self) -> usize {
         self.packets.len()
     }
+    pub fn packets(&self) -> &[Packet] {
+        self.packets.as_slice()
+    }
 }
 
 impl TryFrom<&str> for Payload {
@@ -135,7 +147,7 @@ impl TryFrom<&str> for Payload {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let mut payload = Payload {
-            packets: Vec::new()
+            packets: Vec::new(),
         };
         for packet_str in value.split(PACKET_SEPARATOR) {
             payload.packets.push(Packet::try_from(packet_str)?);
@@ -150,10 +162,13 @@ mod tests {
 
     #[test]
     fn hello_message() {
-        assert_eq!(Packet {
-            packet_type: PacketType::Message,
-            data: Some(PacketData::String("hello".to_string())),
-        }, "4hello".try_into().unwrap());
+        assert_eq!(
+            Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::String("hello".to_string())),
+            },
+            "4hello".try_into().unwrap()
+        );
     }
 
     #[test]
@@ -161,20 +176,26 @@ mod tests {
         let mut base64_msg = "b".to_string();
         base64_msg.push_str(base64::encode(vec![1, 2, 3]).as_str());
         println!("base64 encoded message: {}", base64_msg);
-        assert_eq!(Packet {
-            packet_type: PacketType::Message,
-            data: Some(PacketData::Binary(vec![1, 2, 3])),
-        }, base64_msg.as_str().try_into().unwrap());
+        assert_eq!(
+            Packet {
+                packet_type: PacketType::Message,
+                data: Some(PacketData::Binary(vec![1, 2, 3])),
+            },
+            base64_msg.as_str().try_into().unwrap()
+        );
     }
 
     #[test]
     fn hello_message_payload() {
-        assert_eq!(Payload {
-            packets: vec![Packet {
-                packet_type: PacketType::Message,
-                data: Some(PacketData::String("hello".to_string())),
-            }]
-        }, "4hello".try_into().unwrap());
+        assert_eq!(
+            Payload {
+                packets: vec![Packet {
+                    packet_type: PacketType::Message,
+                    data: Some(PacketData::String("hello".to_string())),
+                }]
+            },
+            "4hello".try_into().unwrap()
+        );
     }
 
     #[test]
@@ -182,12 +203,15 @@ mod tests {
         let mut base64_msg = "b".to_string();
         base64_msg.push_str(base64::encode(vec![1, 2, 3]).as_str());
         println!("base64 encoded message: {}", base64_msg);
-        assert_eq!(Payload {
-            packets: vec![Packet {
-                packet_type: PacketType::Message,
-                data: Some(PacketData::Binary(vec![1, 2, 3])),
-            }]
-        }, base64_msg.as_str().try_into().unwrap());
+        assert_eq!(
+            Payload {
+                packets: vec![Packet {
+                    packet_type: PacketType::Message,
+                    data: Some(PacketData::Binary(vec![1, 2, 3])),
+                }]
+            },
+            base64_msg.as_str().try_into().unwrap()
+        );
     }
 
     #[test]
@@ -195,15 +219,21 @@ mod tests {
         let mut payload_msg = "4hello".to_string();
         payload_msg.push_str(PACKET_SEPARATOR);
         payload_msg.push_str("4world");
-        assert_eq!(Payload {
-            packets: vec![Packet {
-                packet_type: PacketType::Message,
-                data: Some(PacketData::String("hello".to_string())),
-            }, Packet {
-                packet_type: PacketType::Message,
-                data: Some(PacketData::String("world".to_string())),
-            }]
-        }, payload_msg.as_str().try_into().unwrap());
+        assert_eq!(
+            Payload {
+                packets: vec![
+                    Packet {
+                        packet_type: PacketType::Message,
+                        data: Some(PacketData::String("hello".to_string())),
+                    },
+                    Packet {
+                        packet_type: PacketType::Message,
+                        data: Some(PacketData::String("world".to_string())),
+                    }
+                ]
+            },
+            payload_msg.as_str().try_into().unwrap()
+        );
     }
 
     #[test]
@@ -214,15 +244,21 @@ mod tests {
         println!("base64 encoded message: {}", base64_msg);
         payload_msg.push_str("b");
         payload_msg.push_str(base64_msg.as_str());
-        assert_eq!(Payload {
-            packets: vec![Packet {
-                packet_type: PacketType::Message,
-                data: Some(PacketData::String("hello".to_string())),
-            }, Packet {
-                packet_type: PacketType::Message,
-                data: Some(PacketData::Binary(vec![1, 2, 3])),
-            }]
-        }, payload_msg.as_str().try_into().unwrap());
+        assert_eq!(
+            Payload {
+                packets: vec![
+                    Packet {
+                        packet_type: PacketType::Message,
+                        data: Some(PacketData::String("hello".to_string())),
+                    },
+                    Packet {
+                        packet_type: PacketType::Message,
+                        data: Some(PacketData::Binary(vec![1, 2, 3])),
+                    }
+                ]
+            },
+            payload_msg.as_str().try_into().unwrap()
+        );
     }
 
     #[test]
@@ -234,39 +270,51 @@ mod tests {
         println!("base64 encoded message: {}", base64_msg);
         payload_msg.push_str("b");
         payload_msg.push_str(base64_msg.as_str());
-        assert_eq!(Err(PacketParsingError::EmptyString), Payload::try_from(payload_msg.as_str()));
+        assert_eq!(
+            Err(PacketParsingError::EmptyString),
+            Payload::try_from(payload_msg.as_str())
+        );
     }
 
     #[test]
     fn single_packet_in_payload() {
         let mut payload_msg = "4hello".to_string();
-        assert_eq!(Payload {
-            packets: vec![Packet {
-                packet_type: PacketType::Message,
-                data: Some(PacketData::String("hello".to_string())),
-            }]
-        }, Payload::try_from(payload_msg.as_str()).unwrap());
+        assert_eq!(
+            Payload {
+                packets: vec![Packet {
+                    packet_type: PacketType::Message,
+                    data: Some(PacketData::String("hello".to_string())),
+                }]
+            },
+            Payload::try_from(payload_msg.as_str()).unwrap()
+        );
     }
 
     #[test]
     fn probe_ping_packet() {
         let mut payload_msg = "2probe".to_string();
-        assert_eq!(Payload {
-            packets: vec![Packet {
-                packet_type: PacketType::Ping,
-                data: Some(PacketData::String("probe".to_string())),
-            }]
-        }, Payload::try_from(payload_msg.as_str()).unwrap());
+        assert_eq!(
+            Payload {
+                packets: vec![Packet {
+                    packet_type: PacketType::Ping,
+                    data: Some(PacketData::String("probe".to_string())),
+                }]
+            },
+            Payload::try_from(payload_msg.as_str()).unwrap()
+        );
     }
 
     #[test]
     fn probe_pong_packet() {
         let mut payload_msg = "3probe".to_string();
-        assert_eq!(Payload {
-            packets: vec![Packet {
-                packet_type: PacketType::Pong,
-                data: Some(PacketData::String("probe".to_string())),
-            }]
-        }, Payload::try_from(payload_msg.as_str()).unwrap());
+        assert_eq!(
+            Payload {
+                packets: vec![Packet {
+                    packet_type: PacketType::Pong,
+                    data: Some(PacketData::String("probe".to_string())),
+                }]
+            },
+            Payload::try_from(payload_msg.as_str()).unwrap()
+        );
     }
 }
