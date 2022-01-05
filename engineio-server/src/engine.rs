@@ -1,18 +1,9 @@
-use std::fmt::Error;
-use eio_parser::*;
-use tokio::net::{TcpListener, TcpStream};
-use thiserror::Error;
 use crate::transport::*;
-use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        TypedHeader,
-    },
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{get, get_service},
-    Router,
-};
+use axum::extract::ws::{Message, WebSocket};
+use eio_parser::*;
+use std::fmt::Error;
+use thiserror::Error;
+use tokio::net::{TcpListener, TcpStream};
 
 #[derive(Debug, Error)]
 pub enum EngineError {
